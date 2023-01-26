@@ -1,7 +1,7 @@
 #![recursion_limit = "512"]
 #![allow(dead_code)]
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 /// An empty enum, a type without inhabitants.
 /// Cf: https://en.wikipedia.org/wiki/Bottom_type
 enum Null {}
@@ -9,7 +9,7 @@ enum Null {}
 /// PeanoEncoder<Null> is a Peano-type able to represent integers up to 0.
 /// If T is a Peano-type able to represent integers up to n
 /// PeanoEncoder<T> is a Peano-type able to represent integers up to n+1
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum PeanoEncoder<T> {
     Successor(T),
     Zero,
@@ -30,10 +30,11 @@ times2!(PeanoEncoder128, PeanoEncoder64);
 times2!(PeanoEncoder256, PeanoEncoder128);
 
 type Peano0 = PeanoEncoder<Null>;
-type Peano256 = PeanoEncoder256<Null>;
+type Peano1 = PeanoEncoder<Peano0>;
+type Peano2 = PeanoEncoder<Peano1>;
+type Peano255 = PeanoEncoder256<Null>;
 
-impl Peano256 {
-    // This should be unsafe
+impl Peano255 {
     pub fn transmute_u8(x: u8) -> Self {
         unsafe { std::mem::transmute(u8::MAX - x) }
     }
@@ -58,20 +59,44 @@ impl<T: IntoU8> IntoU8 for PeanoEncoder<T> {
     }
 }
 
+/// No discriminant ellision for this one!
+enum Bin<T> {
+    A(T),
+    B(T),
+}
+
 fn main() {
-    println!(
-        "Size of Peano256: {} byte",
-        std::mem::size_of::<Peano256>()
-    );
+    println!("Size of Peano255: {} byte", std::mem::size_of::<Peano255>());
+    for x in [
+        Peano255::Zero,
+        Peano255::Successor(PeanoEncoder::Zero),
+        Peano255::Successor(PeanoEncoder::Successor(PeanoEncoder::Zero)),
+    ] {
+        println!("Machine representation of {:?}: {}", x, unsafe {
+            std::mem::transmute::<_, u8>(x)
+        })
+    }
+    let x = Peano1::Zero;
+    println!("Machine representation of Peano1::{:?}: {}", x, unsafe {
+        std::mem::transmute::<_, u8>(x)
+    });
+    for x in [
+        Peano2::Successor(PeanoEncoder::Zero),
+        Peano2::Zero,
+    ] {
+        println!("Machine representation of Peano2::{:?}: {}", x, unsafe {
+            std::mem::transmute::<_, u8>(x)
+        })
+    }
     for i in 0_u8..=8 {
-        let x = Peano256::transmute_u8(i);
+        let x = Peano255::transmute_u8(i);
         println!("transmute(u8::MAX - {}) = {:?}", i, x);
     }
     for i in 0_u8..=u8::MAX {
-        let x = Peano256::transmute_u8(i);
+        let x = Peano255::transmute_u8(i);
         if i % 8 == 0 {
             print!("{:3} ", i)
-        } else if i%8 == 4 {
+        } else if i % 8 == 4 {
             print!(" ")
         }
         let c = if x.into_u8() == i { '✓' } else { '✗' };
@@ -80,4 +105,8 @@ fn main() {
             println!()
         }
     }
+    println!(
+        "Size of Bin<Bin<Bin<Bin<()>>>>: {} byte",
+        std::mem::size_of::<Bin<Bin<Bin<Bin<()>>>>>()
+    );
 }
